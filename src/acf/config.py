@@ -36,5 +36,47 @@ def jobs_dir() -> Path:
     return path
 
 
+def _scalar(value: str):
+    value = value.strip()
+    if value.lower() in {"true", "false"}:
+        return value.lower() == "true"
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value.strip('"').strip("'")
+
+
+def factory_config():
+    path = repo_root() / "factory.config.yaml"
+    if not path.exists():
+        return {}
+    root = {}
+    stack = [(-1, root)]
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        text = raw.strip()
+        if ":" not in text:
+            continue
+        key, value = text.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+        parent = stack[-1][1]
+        if value:
+            parent[key] = _scalar(value)
+        else:
+            parent[key] = {}
+            stack.append((indent, parent[key]))
+    return root
+
+
 def setting(name: str, default=None):
     return os.getenv(name, default)

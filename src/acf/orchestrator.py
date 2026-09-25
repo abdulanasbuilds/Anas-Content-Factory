@@ -172,7 +172,7 @@ def transcribe_stage(job: Path, manifest: dict):
                 if transcribe(audio, normalized_path):
                     data = json.loads(normalized_path.read_text(encoding="utf-8"))
                     for segment in data.get("segments", []):
-                        raw_segments.append({**segment, "source": str(source.resolve()), "id": f"{source.stem}:{segment["id"]}"})
+                        raw_segments.append({**segment, "source": str(source.resolve()), "id": f"{source.stem}:{segment['id']}"})
                 else:
                     warnings.append(f"Transcript file is invalid and could not be regenerated: {normalized_path}")
 

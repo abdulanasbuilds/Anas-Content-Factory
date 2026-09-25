@@ -112,7 +112,8 @@ def main():
         instruction = " ".join(args.instruction).strip()
         result = revise_and_resume(job, instruction)
         print(json.dumps(result[2], indent=2, ensure_ascii=False))
-        print(f"Revision: {result[1]}")
+        if result[1]:
+            print(f"Revision: {result[1]}")
     elif args.command == "resume":
         print(json.dumps(resume(job), indent=2, ensure_ascii=False))
     elif args.command == "deliver":

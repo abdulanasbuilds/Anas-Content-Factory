@@ -1,0 +1,13 @@
+version: 1
+jobs_dir: ./jobs
+resource_policy:
+  originals_immutable: true
+  stream_media: true
+  max_parallel_media_jobs: 1
+  generate_proxies: true
+  proxy_width: 1280
+providers:
+  primary: gemini
+  fallback: openrouter
+editing:
+  review_required_before_final: true

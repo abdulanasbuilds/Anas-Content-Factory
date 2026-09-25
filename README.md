@@ -102,6 +102,10 @@ Run QC directly:
 
     acf qc Project
 
+Check the local runtime before handing the laptop to the factory:
+
+    acf doctor
+
 Deliver configured final outputs:
 
     acf deliver Project

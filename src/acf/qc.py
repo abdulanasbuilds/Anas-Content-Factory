@@ -159,7 +159,7 @@ def run(job: Path):
         try:
             data = json.loads(shorts_manifest.read_text(encoding="utf-8"))
             for item in data.get("shorts", []):
-                targets.append((Path(item["path"]), "vertical_1080x1920", True))
+                targets.append((Path(item["path"]), "vertical_1080x1920", bool(item.get("captions", False))))
         except (KeyError, json.JSONDecodeError):
             pass
 

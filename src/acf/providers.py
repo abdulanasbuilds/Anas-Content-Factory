@@ -53,7 +53,7 @@ class OpenRouter:
 
     def generate_vision(self, prompt: str, images: list[Path]):
         key = env("OPENROUTER_API_KEY")
-        model = env("OPENROUTER_VISION_MODEL", env("OPENROUTER_MODEL", "openrouter/free"))
+        model = (env("OPENROUTER_VISION_MODEL") or env("OPENROUTER_MODEL", "openrouter/free"))
         content = [{"type": "text", "text": prompt}]
         for path in images:
             mime = "image/jpeg" if path.suffix.lower() in {".jpg", ".jpeg"} else "image/png"

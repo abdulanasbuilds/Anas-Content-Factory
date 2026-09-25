@@ -7,7 +7,7 @@ from pathlib import Path
 from .config import factory_config, jobs_dir
 from .delivery import deliver
 from .editor import EditPlanError, render_plan
-from .escalation import escalate
+from .escalation import escalate, pending
 from .export_profiles import get_profile
 from .media import VIDEO_EXTS, discover, extract_audio, make_proxy, write_manifest, duration
 from .providers import ProviderError, extract_json, generate
@@ -422,6 +422,11 @@ def qc_stage(job: Path):
 
 
 def delivery_stage(job: Path):
+    state = _load_state(job)
+    if not state["stages"].get("QC", {}).get("status") == "completed":
+        report = qc_stage(job)
+        if not report.get("passed"):
+            return _load_state(job)
     start_stage(_state_path(job), "DELIVERING")
     plan = json.loads((job / "decisions" / "edit-plan.json").read_text(encoding="utf-8"))
     locations = deliver(job, plan, _load_state(job).get("requested_outputs") or [factory_config().get("editing", {}).get("default_output_profile", "youtube_1080p")])
@@ -464,6 +469,8 @@ def _guard(job: Path, stage: str, function, question: str):
 
 def run_pipeline(job: Path):
     state = recover_for_resume(_state_path(job))
+    if pending(job):
+        return _load_state(job)
     source = Path(state["input_path"])
 
     if not _stage_done(job, "ANALYZING"):

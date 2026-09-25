@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 
-from .config import jobs_dir
+from .config import factory_config, jobs_dir
 from .delivery import deliver
 from .editor import EditPlanError, render_plan
 from .escalation import escalate
@@ -165,7 +165,16 @@ def transcribe_stage(job: Path, manifest: dict):
                         }
                     )
             except json.JSONDecodeError:
-                warnings.append(f"Transcript file is invalid: {normalized_path}")
+                try:
+                    normalized_path.unlink()
+                except OSError:
+                    pass
+                if transcribe(audio, normalized_path):
+                    data = json.loads(normalized_path.read_text(encoding="utf-8"))
+                    for segment in data.get("segments", []):
+                        raw_segments.append({**segment, "source": str(source.resolve()), "id": f"{source.stem}:{segment["id"]}"})
+                else:
+                    warnings.append(f"Transcript file is invalid and could not be regenerated: {normalized_path}")
 
     combined = {"version": 1, "segments": sorted(raw_segments, key=lambda x: (x["start"], x["end"])), "sources": sorted({x["source"] for x in raw_segments})}
     (job / "analysis" / "transcript.json").write_text(
@@ -256,7 +265,7 @@ def _normalize_plan(plan, manifest):
     if not normalized["edit_decisions"]:
         normalized = _fallback_plan(manifest)
 
-    outputs = normalized.get("requested_outputs") or ["youtube_1080p"]
+    outputs = normalized.get("requested_outputs") or [factory_config().get("editing", {}).get("default_output_profile", "youtube_1080p")]
     cleaned_outputs = []
     for item in outputs:
         name = item.get("profile") if isinstance(item, dict) else item
@@ -415,7 +424,7 @@ def qc_stage(job: Path):
 def delivery_stage(job: Path):
     start_stage(_state_path(job), "DELIVERING")
     plan = json.loads((job / "decisions" / "edit-plan.json").read_text(encoding="utf-8"))
-    locations = deliver(job, plan, _load_state(job).get("requested_outputs") or ["youtube_1080p"])
+    locations = deliver(job, plan, _load_state(job).get("requested_outputs") or [factory_config().get("editing", {}).get("default_output_profile", "youtube_1080p")])
     from .qc import run as run_qc
     report = run_qc(job)
     if not report["passed"]:

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .config import jobs_dir
+from .doctor import run as doctor_run
 from .escalation import format_question, pending, resolve
 from .orchestrator import (
     analyze_source,
@@ -59,7 +60,7 @@ def main():
     p.add_argument("project")
     p.add_argument("instruction", nargs="+")
     
-    for name in ("resume", "deliver", "qc"):
+    for name in ("resume", "deliver", "qc", "doctor"):
         p = sub.add_parser(name)
         p.add_argument("project")
 
@@ -76,6 +77,10 @@ def main():
             return
         result = run_pipeline(job)
         print(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+
+    if args.command == "doctor":
+        print(json.dumps(doctor_run(), indent=2, ensure_ascii=False))
         return
 
     job = _job(args.project)

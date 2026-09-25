@@ -60,9 +60,10 @@ def main():
     p.add_argument("project")
     p.add_argument("instruction", nargs="+")
     
-    for name in ("resume", "deliver", "qc", "doctor"):
+    for name in ("resume", "deliver", "qc"):
         p = sub.add_parser(name)
         p.add_argument("project")
+    sub.add_parser("doctor")
 
     args = parser.parse_args()
 

@@ -97,6 +97,14 @@ def generate_candidates(job: Path, plan: dict):
 def render_candidates(job: Path, candidates: list[dict]):
     root = job / "exports" / "shorts"
     root.mkdir(parents=True, exist_ok=True)
+    transcript_available = False
+    transcript_path = job / "analysis" / "transcript.json"
+    if transcript_path.exists():
+        try:
+            transcript_available = bool(json.loads(transcript_path.read_text(encoding="utf-8")).get("segments"))
+        except json.JSONDecodeError:
+            transcript_available = False
+
     rendered = []
     for index, candidate in enumerate(candidates, 1):
         title = candidate.get("title") or f"Short {index}"
@@ -110,7 +118,7 @@ def render_candidates(job: Path, candidates: list[dict]):
                     "start": candidate["start"],
                     "end": candidate["end"],
                     "action": "keep",
-                    "captions": True,
+                    "captions": transcript_available,
                     "reframe": candidate.get("reframe") or {"x": 0.5, "y": 0.5},
                 }
             ],
@@ -126,6 +134,7 @@ def render_candidates(job: Path, candidates: list[dict]):
                 "end": candidate["end"],
                 "hook": candidate.get("hook", ""),
                 "confidence": candidate.get("confidence", 0.0),
+                "captions": transcript_available,
             }
         )
     (root / "shorts-manifest.json").write_text(

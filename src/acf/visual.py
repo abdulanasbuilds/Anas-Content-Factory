@@ -19,7 +19,7 @@ def _frame_times(total_duration: float, max_frames: int = 24):
     return [margin + usable * i / (count - 1) for i in range(count)]
 
 
-def _parse_visual_response(text, frames):
+def _parse_visual_response(text, frames, source):
     data = extract_json(text)
     items = data.get("frames") if isinstance(data, dict) else data
     if not isinstance(items, list):
@@ -33,6 +33,7 @@ def _parse_visual_response(text, frames):
         out.append(
             {
                 "timestamp": float(timestamp),
+                "source": str(source.resolve()),
                 "frame": frame["path"],
                 "shot_type": item.get("shot_type", "unknown"),
                 "description": item.get("description", ""),
@@ -96,7 +97,7 @@ def analyze(job: Path, manifest: dict):
                 )
                 text, provider = generate_vision(prompt, [Path(f["path"]) for f in batch])
                 provider_used = provider
-                scenes.extend(_parse_visual_response(text, batch))
+                scenes.extend(_parse_visual_response(text, batch, source))
         except ProviderError as exc:
             warnings.append(f"Visual AI unavailable for {source.name}: {exc}")
 
@@ -119,8 +120,10 @@ def analyze(job: Path, manifest: dict):
 
     assets = []
     for item in manifest.get("files", []):
-        if Path(item["path"]).suffix.lower() not in VIDEO_EXTS:
-            assets.append(item)
+        asset = dict(item)
+        suffix = Path(item["path"]).suffix.lower()
+        asset["role"] = "video_source" if suffix in VIDEO_EXTS else "supporting_asset"
+        assets.append(asset)
 
     (job / "analysis" / "scenes.json").write_text(
         json.dumps({"version": 1, "scenes": all_scenes}, indent=2, ensure_ascii=False),

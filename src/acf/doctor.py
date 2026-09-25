@@ -28,7 +28,9 @@ def run():
     add("whisper_binary", bool(whisper), str(whisper or "optional and not found"))
     add("whisper_model", bool(model and Path(model).exists()), model or "optional and not configured")
 
-    return {"passed": all(item["passed"] for item in checks[:5]), "checks": checks}
+    providers_ok = Gemini().available() or OpenRouter().available()
+    required_ok = bool(ffmpeg) and bool(ffprobe) and providers_ok
+    return {"passed": required_ok, "checks": checks}
 
 
 if __name__ == "__main__":

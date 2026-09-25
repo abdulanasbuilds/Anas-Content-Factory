@@ -86,6 +86,8 @@ def finish_stage(path: Path, stage: str, artifacts: list[str] | None = None, war
         state["completed_stages"].append(stage)
     state["blocked"] = False
     state["human_action_required"] = False
+    state["status"] = stage
+    state["current_stage"] = stage
     state["updated_at"] = now()
     save(path, state)
     return state

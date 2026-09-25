@@ -1,13 +1,31 @@
-version: 1
+version: 2
+
 jobs_dir: ./jobs
+
 resource_policy:
   originals_immutable: true
   stream_media: true
   max_parallel_media_jobs: 1
   generate_proxies: true
   proxy_width: 1280
+  visual_frame_width: 768
+  max_visual_frames_per_video: 24
+
 providers:
   primary: gemini
   fallback: openrouter
+
 editing:
+  story_first: true
   review_required_before_final: true
+  default_output_profile: youtube_1080p
+
+shorts:
+  enabled: true
+  min_seconds: 20
+  max_seconds: 60
+  max_candidates: 6
+
+recovery:
+  checkpoint_each_segment: true
+  resume_running_stages: true

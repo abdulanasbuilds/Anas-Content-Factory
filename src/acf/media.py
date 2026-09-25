@@ -6,6 +6,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .config import factory_config
+
 
 VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".mts", ".m2ts"}
 AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"}
@@ -96,7 +98,9 @@ def extract_audio(source: Path, destination: Path):
         return False
 
 
-def make_proxy(source: Path, destination: Path, width=1280):
+def make_proxy(source: Path, destination: Path, width=None):
+    if width is None:
+        width = int(factory_config().get("resource_policy", {}).get("proxy_width", 1280))
     if destination.exists() and destination.stat().st_size > 0:
         return True
     destination.parent.mkdir(parents=True, exist_ok=True)

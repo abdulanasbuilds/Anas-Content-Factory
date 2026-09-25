@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .config import factory_config
 from .media import VIDEO_EXTS, duration, extract_frame
 from .providers import ProviderError, extract_json, generate_vision
 
@@ -45,6 +46,9 @@ def _parse_visual_response(text, frames):
 
 
 def analyze(job: Path, manifest: dict):
+    config = factory_config().get("resource_policy", {})
+    max_frames = int(config.get("max_visual_frames_per_video", 24))
+    frame_width = int(config.get("visual_frame_width", 768))
     frame_root = job / "working" / "frames"
     visual_root = job / "analysis" / "visual"
     frame_root.mkdir(parents=True, exist_ok=True)
@@ -61,20 +65,21 @@ def analyze(job: Path, manifest: dict):
 
         proxy = job / "working" / "proxies" / f"{source.stem}_proxy.mp4"
         total = duration(proxy) or float(item.get("probe", {}).get("format", {}).get("duration", 0) or 0)
-        times = _frame_times(total)
+        times = _frame_times(total, max_frames)
         frames = []
         for index, timestamp in enumerate(times):
             frame_path = frame_root / source.stem / f"frame_{index:03d}.jpg"
-            if extract_frame(proxy if proxy.exists() else source, timestamp, frame_path):
+            if extract_frame(proxy if proxy.exists() else source, timestamp, frame_path, width=frame_width):
                 frames.append({"timestamp": timestamp, "path": str(frame_path)})
 
         result_file = visual_root / f"{source.stem}.json"
         if result_file.exists() and result_file.stat().st_size > 0:
             try:
                 prior = json.loads(result_file.read_text(encoding="utf-8"))
-                all_scenes.extend(prior.get("scenes", []))
-                provider_used = prior.get("provider") or provider_used
-                continue
+                if prior.get("provider") or prior.get("scenes"):
+                    all_scenes.extend(prior.get("scenes", []))
+                    provider_used = prior.get("provider") or provider_used
+                    continue
             except json.JSONDecodeError:
                 pass
 

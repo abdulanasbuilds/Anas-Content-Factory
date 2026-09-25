@@ -439,38 +439,94 @@ def _stage_done(job, stage):
     return _load_state(job)["stages"].get(stage, {}).get("status") == "completed"
 
 
+def _guard(job: Path, stage: str, function, question: str):
+    try:
+        return function()
+    except Exception as exc:
+        escalate(
+            job,
+            stage,
+            question,
+            f"Stage {stage} stopped with an error.",
+            {"error": str(exc)},
+        )
+        return None
+
+
 def run_pipeline(job: Path):
     state = recover_for_resume(_state_path(job))
     source = Path(state["input_path"])
 
     if not _stage_done(job, "ANALYZING"):
-        manifest = analyze_source(source, job)
+        manifest = _guard(
+            job,
+            "ANALYZING",
+            lambda: analyze_source(source, job),
+            "Fix the media-discovery or FFmpeg issue shown in the human-action record, then run acf resume.",
+        )
+        if manifest is None:
+            return _load_state(job)
     else:
         manifest = json.loads((job / "analysis" / "media-manifest.json").read_text(encoding="utf-8"))
 
     if not _stage_done(job, "TRANSCRIBING"):
-        transcribe_stage(job, manifest)
+        if _guard(
+            job,
+            "TRANSCRIBING",
+            lambda: transcribe_stage(job, manifest),
+            "Configure or fix transcription if timestamped speech is required, then run acf resume.",
+        ) is None:
+            return _load_state(job)
+
     if not _stage_done(job, "VISUAL_ANALYSIS"):
-        visual_stage(job, manifest)
+        if _guard(
+            job,
+            "VISUAL_ANALYSIS",
+            lambda: visual_stage(job, manifest),
+            "Fix the visual-analysis provider or media issue, then run acf resume.",
+        ) is None:
+            return _load_state(job)
+
     if not _stage_done(job, "PLANNING"):
-        plan = plan_stage(job, manifest)
+        plan = _guard(
+            job,
+            "PLANNING",
+            lambda: plan_stage(job, manifest),
+            "Fix the planning/provider issue shown in the human-action record, then run acf resume.",
+        )
         if plan is None:
             return _load_state(job)
     else:
         plan = json.loads((job / "decisions" / "edit-plan.json").read_text(encoding="utf-8"))
 
-    if not _stage_done(job, "EXECUTING"):
-        execute_stage(job)
-    if not _stage_done(job, "REVIEW"):
-        review_stage(job)
-    if not _stage_done(job, "SHORTS"):
-        shorts_stage(job)
+    for stage, fn, question in (
+        ("EXECUTING", lambda: execute_stage(job), "Fix the FFmpeg/edit-plan error, then run acf resume."),
+        ("REVIEW", lambda: review_stage(job), "Fix the review-rendering error, then run acf resume."),
+        ("SHORTS", lambda: shorts_stage(job), "Fix the Shorts generation/rendering issue, then run acf resume."),
+    ):
+        if not _stage_done(job, stage):
+            if _guard(job, stage, fn, question) is None:
+                return _load_state(job)
+
     if not _stage_done(job, "QC"):
-        report = qc_stage(job)
-        if not report.get("passed"):
+        report = _guard(
+            job,
+            "QC",
+            lambda: qc_stage(job),
+            "Review the QC report, fix the reported media problem, then run acf resume.",
+        )
+        if report is None or not report.get("passed"):
             return _load_state(job)
+
     if not _stage_done(job, "DELIVERING"):
-        delivery_stage(job)
+        result = _guard(
+            job,
+            "DELIVERING",
+            lambda: delivery_stage(job),
+            "Fix the final-delivery or post-delivery QC problem, then run acf resume.",
+        )
+        if result is None:
+            return _load_state(job)
     return _load_state(job)
 
 

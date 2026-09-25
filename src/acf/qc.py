@@ -171,7 +171,8 @@ def run(job: Path):
         try:
             plan = json.loads(plan_path.read_text(encoding="utf-8"))
             expected = plan.get("requested_outputs") or []
-            if isinstance(expected, list):
+            delivery_started = (job / "delivery" / "delivery-manifest.json").exists()
+            if delivery_started and isinstance(expected, list):
                 existing_profiles = {Path(item["file"]).stem for item in reports if item.get("file")}
                 for request in expected:
                     name = request.get("profile") if isinstance(request, dict) else request

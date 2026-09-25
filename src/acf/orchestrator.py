@@ -555,7 +555,17 @@ def resume(job: Path):
 def revise_and_resume(job: Path, instruction: str):
     from .plan_revision import apply_revision
 
-    plan, provider, number = apply_revision(job, instruction)
+    try:
+        plan, provider, number = apply_revision(job, instruction)
+    except ProviderError as exc:
+        record = escalate(
+            job,
+            "PLANNING",
+            "The edit revision could not be generated. Fix the AI provider problem shown in the human-action record, then run acf resume.",
+            "Natural-language revision provider failed.",
+            {"error": str(exc), "instruction": instruction},
+        )
+        return None, None, _load_state(job)
     state = _load_state(job)
     state["provider_used"] = provider
     state["status"] = "RESUMING"

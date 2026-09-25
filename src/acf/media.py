@@ -9,6 +9,7 @@ from pathlib import Path
 
 VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".mts", ".m2ts"}
 AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def binary(env_name, default):
@@ -28,7 +29,7 @@ def run(cmd, check=True):
 def discover(root: Path):
     if root.is_file():
         return [root]
-    allowed = VIDEO_EXTS | AUDIO_EXTS
+    allowed = VIDEO_EXTS | AUDIO_EXTS | IMAGE_EXTS
     return sorted(p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in allowed)
 
 

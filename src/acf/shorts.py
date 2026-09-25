@@ -4,6 +4,7 @@ import json
 import re
 from pathlib import Path
 
+from .config import factory_config
 from .editor import render_plan
 from .providers import ProviderError, extract_json, generate
 
@@ -40,7 +41,7 @@ def _fallback_candidates(plan):
                     "title": item.get("title") or "Highlight",
                     "source": item.get("source"),
                     "start": start,
-                    "end": min(end, start + 60),
+                    "end": min(end, start + max_seconds),
                     "hook": item.get("reason") or item.get("description", ""),
                     "reframe": {"x": 0.5, "y": 0.5},
                     "confidence": 0.5,
@@ -67,6 +68,10 @@ def generate_candidates(job: Path, plan: dict):
         raw, provider = generate(prompt)
         data = extract_json(raw)
         candidates = data.get("shorts", []) if isinstance(data, dict) else []
+        policy = factory_config().get("shorts", {})
+        min_seconds = float(policy.get("min_seconds", 20))
+        max_seconds = float(policy.get("max_seconds", 60))
+        max_candidates = int(policy.get("max_candidates", 6))
         valid = []
         for candidate in candidates:
             if not isinstance(candidate, dict):
@@ -76,7 +81,7 @@ def generate_candidates(job: Path, plan: dict):
                 end = float(candidate["end"])
             except (KeyError, TypeError, ValueError):
                 continue
-            if end <= start or end - start < 8:
+            if end <= start or end - start < min_seconds:
                 continue
             valid.append(
                 {
@@ -89,7 +94,7 @@ def generate_candidates(job: Path, plan: dict):
                     "confidence": candidate.get("confidence", 0.0),
                 }
             )
-        return valid[:6], provider, None
+        return valid[:max_candidates], provider, None
     except ProviderError as exc:
         return _fallback_candidates(plan), None, str(exc)
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -51,7 +52,8 @@ def create_job(source: Path, references=None):
                 return job
         except Exception:
             pass
-        job = jobs_dir() / f"{base_name}-{abs(hash(str(source.resolve()))) % 100000:05d}"
+        fingerprint = hashlib.sha1(str(source.resolve()).encode("utf-8")).hexdigest()[:10]
+        job = jobs_dir() / f"{base_name}-{fingerprint}"
 
     for folder in ("source", "analysis", "assets", "decisions", "working", "review", "exports", "delivery"):
         (job / folder).mkdir(parents=True, exist_ok=True)

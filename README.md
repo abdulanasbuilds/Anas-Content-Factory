@@ -1,55 +1,185 @@
 # Anas Content Factory
 
-An autonomous, local-first content post-production system.
+An autonomous, local-first post-production factory for video, audio and mixed content.
 
-## Intended workflow
+The intended user experience is simple:
 
-Give it a path:
+    acf run "D:/Videos/ClientProject"
 
-    acf run "D:\Videos\ClientProject"
+The system discovers the media, prepares lightweight analysis assets, normalizes a timestamped transcript when Whisper is available, samples frames for vision analysis, asks a cloud model to create an executable edit plan, renders a review build, creates Shorts, runs technical QC, and delivers configured outputs.
 
-It discovers the media, creates a job, probes the files, prepares lightweight analysis media, routes semantic planning to configured cloud AI, writes an inspectable edit plan and preserves state.
+The laptop is the deterministic workstation. Large semantic models do not need to run locally.
 
-The laptop does not need to run a large language model.
+## Pipeline
 
-## Architecture
+1. Discover
+   - Finds supported video, audio and image assets recursively.
+   - Records FFprobe metadata in analysis/media-manifest.json.
+   - Does not copy or modify the originals.
 
-- Producer/Director: understands the content and plans the edit.
-- Editor/Finisher: executes the plan.
-- FFmpeg/FFprobe: deterministic media operations.
-- Lightweight transcription: local when installed.
-- Gemini: primary semantic provider.
-- OpenRouter: configurable fallback provider.
-- Local jobs: never committed to Git.
+2. Analyze
+   - Creates lightweight 1280px proxies.
+   - Extracts mono 16 kHz working audio.
+   - Keeps long media streamed through FFmpeg instead of loading it into RAM.
+
+3. Transcribe
+   - Optional local Whisper/whisper.cpp.
+   - Normalizes different Whisper JSON shapes into analysis/transcript.json.
+   - Produces analysis/transcript.md and SRT-ready timestamps.
+   - Missing transcription is treated as a degraded capability, not an automatic failure.
+
+4. Visual analysis
+   - Selects a bounded number of frames from proxies.
+   - Sends only selected frames to the configured vision model.
+   - Stores analysis/scenes.json and analysis/assets.json.
+
+5. Plan
+   - Producer/Director model receives the manifest, transcript, visual analysis and references.
+   - Produces decisions/edit-plan.json.
+   - Plans are timestamped and inspectable before rendering.
+   - Project category folders are created only after the category is inferred.
+
+6. Execute
+   - Deterministic FFmpeg segment renders.
+   - Supports trims, joins, reframing, captions when transcript data exists, graphics when an explicit font file is supplied, and audio normalization.
+   - Segment checkpoints make interrupted renders resumable.
+
+7. Review
+   - Produces a lightweight review/review.mp4.
+   - Writes review/review-notes.md with the checks to perform.
+   - Revisions can be requested in natural language.
+
+8. Shorts
+   - Producer selects self-contained short-form candidates.
+   - Each candidate is rendered independently in 9:16.
+   - Candidates and their timestamps are stored in decisions/shorts-candidates.json.
+
+9. QC
+   - Checks file existence and size.
+   - FFprobe checks duration, streams, dimensions and frame rate.
+   - FFmpeg decode check catches corrupt outputs.
+   - Audio checks catch silence and clipping.
+   - Black-frame checks catch long unexpected black spans.
+   - Caption metadata is checked when captions were requested.
+   - Final delivery expectations are checked after delivery starts.
+
+10. Delivery
+    - Master 1080p render is the canonical intermediate.
+    - Configured profiles are transcoded into delivery/.
+    - A final post-delivery QC is run before the job reaches COMPLETED.
+
+## CLI
+
+Start an autonomous run:
+
+    acf run "D:/Videos/Project"
+
+Add a supplied reference URL:
+
+    acf run "D:/Videos/Project" --reference "https://example.com/reference"
+
+Inspect a job:
+
+    acf status Project
+
+Resume after interruption or a resolved human-action request:
+
+    acf resume Project
+
+Show a pending human question or the review location:
+
+    acf review Project
+
+Resolve a pending question and continue:
+
+    acf review Project --answer "Use the second camera from 01:12 to 01:26."
+
+Request a natural-language edit revision:
+
+    acf revise Project "Tighten the intro and remove the repeated explanation around the middle."
+
+Run QC directly:
+
+    acf qc Project
+
+Deliver configured final outputs:
+
+    acf deliver Project
+
+## Job layout
+
+Each job uses:
+
+    jobs/PROJECT/
+        project.json
+        source/
+        analysis/
+        assets/
+        decisions/
+        working/
+        review/
+        exports/
+        delivery/
+
+Required analysis files include:
+
+- summary.md
+- transcript.md
+- transcript.json
+- scenes.json
+- speakers.json
+- highlights.json
+- issues.json
+- assets.json
+- media-manifest.json
+- references.md
+
+The project state tracks stage attempts, completion, errors, warnings, outputs, human-action requests and resumability.
+
+## Export profiles
+
+Built-in profiles are:
+
+- review
+- master_1080p
+- youtube_1080p
+- vertical_1080x1920
+- square_1080
+
+Aliases include youtube, shorts, reels, instagram-reel and square.
+
+## Human escalation
+
+The system should only ask when it is genuinely blocked or the input is materially ambiguous.
+
+Questions are stored in decisions/human-action.json. The CLI shows the exact stage, reason, question and context. After the answer is supplied, acf resume retries from the interrupted stage rather than restarting the whole job.
+
+## Resource policy
+
+- Original media is treated as immutable.
+- Long media is processed with FFmpeg streaming operations.
+- Analysis uses low-resolution proxies and selected frames.
+- The semantic model receives metadata, transcript text and selected frames instead of entire source files by default.
+- Maximum media concurrency is one job at a time.
+- No account rotation or quota-abuse logic is included.
 
 ## Setup
 
 Requirements:
+
 - Python 3.10+
 - FFmpeg and FFprobe on PATH
-- Optional whisper-cli for transcription
-- A Gemini or OpenRouter API key
+- Optional whisper-cli plus a local model file
+- A Gemini API key or OpenRouter API key for semantic planning and vision
 
 Install:
 
     python -m pip install -e .
 
-Configure environment variables from .env.example.
+Copy .env.example to .env and fill only the providers you actually use.
 
-Run:
+Never commit .env, source media, generated jobs or model weights.
 
-    acf run "D:\Videos\Project"
+## Engineering status
 
-Inspect:
-
-    acf status Project
-    acf plan Project
-    acf qc Project
-
-## Current milestone
-
-The repository currently contains the core job lifecycle, media discovery/probing, proxy/audio preparation, provider routing, producer planning, state tracking and QC foundation.
-
-The next milestone is full timestamped transcription ingestion and deterministic execution of edit-plan decisions into review/final renders.
-
-Never commit source media, generated jobs or secrets.
+The requested production subsystems are now implemented in the repository. The next real-world validation step is running the factory against actual client media and tuning provider prompts and FFmpeg edge cases from those test runs.

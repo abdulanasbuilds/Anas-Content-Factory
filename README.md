@@ -49,7 +49,8 @@ The laptop is the deterministic workstation. Large semantic models do not need t
 7. Review
    - Produces a lightweight review/review.mp4.
    - Writes review/review-notes.md with the checks to perform.
-   - Revisions can be requested in natural language.
+   - When review_required_before_final is enabled, the pipeline pauses here until acf review PROJECT --approve.
+   - Revisions can be requested in natural language and restart only the downstream stages.
 
 8. Shorts
    - Clip Hunter analyzes transcript chunks instead of repeatedly sending the entire transcript.

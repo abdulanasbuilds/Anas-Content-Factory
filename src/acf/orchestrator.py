@@ -353,6 +353,7 @@ def plan_stage(job: Path, manifest: dict):
         "Every motion beat must use an exact source and exact transcript-aligned timestamps. "
         "Keep beat text short (normally under 10 words). "
         "Return optional motion_beats with source, start, end, text, position, style. "
+        "Choose style_profile from clean, short-form, course, or showreel. "
         "\nSTYLE GUIDANCE:\n" + style_guidance
         + "\nPROJECT STYLE MEMORY:\n" + style_memory[:12000]
         + "\nMANIFEST:\n" + json.dumps(manifest, indent=2, ensure_ascii=False)[:50000]

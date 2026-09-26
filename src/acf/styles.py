@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 
 STYLES = {
@@ -74,7 +75,16 @@ def choose(project_type: str, requested: str | None = None):
         "event": "showreel",
         "event-highlight": "showreel",
     }
-    key = mapping.get(project, "clean")
+    if project in mapping:
+        key = mapping[project]
+    else:
+        try:
+            from .config import factory_config
+            key = _clean(factory_config().get("editing", {}).get("default_style", "clean"))
+        except Exception:
+            key = "clean"
+        if key not in STYLES:
+            key = "clean"
     return key, STYLES[key]
 
 

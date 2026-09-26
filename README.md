@@ -20,6 +20,7 @@ The laptop is the deterministic workstation. Large semantic models do not need t
 2. Analyze
    - Creates lightweight 1280px proxies.
    - Extracts mono 16 kHz working audio.
+   - Runs a lightweight FFmpeg silence scan and stores analysis/silence.json.
    - Keeps long media streamed through FFmpeg instead of loading it into RAM.
 
 3. Transcribe
@@ -32,6 +33,7 @@ The laptop is the deterministic workstation. Large semantic models do not need t
    - Selects a bounded number of frames from proxies.
    - Sends only selected frames to the configured vision model.
    - Stores analysis/scenes.json and analysis/assets.json.
+   - Builds analysis/media-index.json so local assets and visual discoveries can be searched without a database.
 
 5. Plan
    - Producer/Director model receives the manifest, transcript, visual analysis and references.
@@ -50,8 +52,10 @@ The laptop is the deterministic workstation. Large semantic models do not need t
    - Revisions can be requested in natural language.
 
 8. Shorts
-   - Producer selects self-contained short-form candidates.
-   - Each candidate is rendered independently in 9:16.
+   - Clip Hunter analyzes transcript chunks instead of repeatedly sending the entire transcript.
+   - Candidates are scored for hook strength, standalone clarity, usefulness, pacing and related editorial signals.
+   - Overlapping candidates are deduplicated before selection.
+   - Each candidate is rendered independently in 9:16 with captions when timestamped transcript data exists.
    - Candidates and their timestamps are stored in decisions/shorts-candidates.json.
 
 9. QC
@@ -90,9 +94,21 @@ Show a pending human question or the review location:
 
     acf review Project
 
+Approve the review build and continue:
+
+    acf review Project --approve
+
 Resolve a pending question and continue:
 
     acf review Project --answer "Use the second camera from 01:12 to 01:26."
+
+Run a deterministic fast action without asking an AI model to reason through the mechanical operation:
+
+    acf action Project "remove dead air"
+
+Search the local project media index:
+
+    acf assets Project "Claude logo"
 
 Request a natural-language edit revision:
 
@@ -136,6 +152,8 @@ Required analysis files include:
 - issues.json
 - assets.json
 - media-manifest.json
+- media-index.json
+- silence.json
 - references.md
 
 The project state tracks stage attempts, completion, errors, warnings, outputs, human-action requests and resumability.
@@ -154,7 +172,7 @@ Aliases include youtube, shorts, reels, instagram-reel and square.
 
 ## Human escalation
 
-The system should only ask when it is genuinely blocked or the input is materially ambiguous.
+The system should only ask when it is genuinely blocked, the input is materially ambiguous, or the configured review gate needs a human approval.
 
 Questions are stored in decisions/human-action.json. The CLI shows the exact stage, reason, question and context. After the answer is supplied, acf resume retries from the interrupted stage rather than restarting the whole job.
 
@@ -186,4 +204,4 @@ Never commit .env, source media, generated jobs or model weights.
 
 ## Engineering status
 
-The requested production subsystems are now implemented in the repository. The next real-world validation step is running the factory against actual client media and tuning provider prompts and FFmpeg edge cases from those test runs.
+The requested production subsystems plus the lean automation layer are implemented: Clip Hunter, smart-silence analysis, a searchable media index, deterministic fast actions, and an explicit review gate. The next real-world validation step is running the factory against actual client media and tuning provider prompts and FFmpeg edge cases from those test runs.

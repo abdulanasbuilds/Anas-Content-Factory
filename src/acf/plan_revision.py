@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from .providers import ProviderError, extract_json, generate
+from .styles import record_feedback
 
 def apply_revision(job: Path, request: str):
     path = job / "decisions" / "edit-plan.json"
@@ -30,4 +31,5 @@ def apply_revision(job: Path, request: str):
         encoding="utf-8",
     )
     path.write_text(json.dumps(updated, indent=2, ensure_ascii=False), encoding="utf-8")
+    record_feedback(job, request)
     return updated, provider, number

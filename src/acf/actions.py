@@ -130,6 +130,30 @@ def remove_dead_air_from_plan(plan: dict, silence_data: dict):
     return output
 
 
+def apply_add_captions(job: Path):
+    plan = _load_plan(job)
+    revised = dict(plan)
+    revised["edit_decisions"] = [
+        ({**item, "captions": True} if isinstance(item, dict) else item)
+        for item in plan.get("edit_decisions", [])
+    ]
+    revised.setdefault("automation", {})["captions"] = {
+        "enabled": True,
+        "reason": "Requested through the fast action router",
+    }
+    revisions = job / "decisions" / "revisions"
+    revisions.mkdir(parents=True, exist_ok=True)
+    existing = sorted(revisions.glob("router-*.json"))
+    number = len(existing) + 1
+    path = revisions / f"router-{number:03d}-captions.json"
+    path.write_text(json.dumps(revised, indent=2, ensure_ascii=False), encoding="utf-8")
+    (job / "decisions" / "edit-plan.json").write_text(
+        json.dumps(revised, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return revised
+
+
 def apply_remove_dead_air(job: Path):
     plan = _load_plan(job)
     silence = _load_silence(job)
@@ -151,6 +175,6 @@ def describe(action):
     return {
         "remove_dead_air": "Uses FFmpeg silencedetect results to create conservative keep-ranges without asking an LLM to perform the mechanical cut.",
         "create_shorts": "Runs the chunked Clip Hunter and Shorts renderer.",
-        "add_captions": "Uses the existing transcript-backed caption renderer.",
+        "add_captions": "Marks the current edit plan for transcript-backed caption rendering and reruns downstream stages.",
         "unknown": "No deterministic ACF action matched the request.",
     }.get(action, "Unknown action.")

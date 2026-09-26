@@ -14,6 +14,10 @@ Supported editorial actions include:
 - Burn timestamp-derived captions when transcript data exists.
 - Apply conservative audio normalization.
 - Apply explicit graphics only when the plan includes a valid font file.
+- Render sparse motion beats/callouts from the plan using deterministic FFmpeg drawtext.
+- Preserve beat timing relative to the exact source segment.
+- Keep overlays legible and inside safe areas.
+- Treat discovered supporting video/image assets as cutaway material only when the plan explicitly places them.
 - Render review, master, vertical and square outputs.
 
 Checkpoint each segment. Reuse successful segment renders when the same plan and profile are requested again.

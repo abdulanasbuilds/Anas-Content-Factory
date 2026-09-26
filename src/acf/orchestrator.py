@@ -478,6 +478,8 @@ def qc_stage(job: Path):
 
 def delivery_stage(job: Path):
     state = _load_state(job)
+    if not _stage_done(job, "REVIEW") or not _review_gate(job):
+        return _load_state(job)
     if not state["stages"].get("QC", {}).get("status") == "completed":
         report = qc_stage(job)
         if not report.get("passed"):

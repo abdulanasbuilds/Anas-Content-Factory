@@ -1,6 +1,12 @@
 # Anas Content Factory
 
-An autonomous, local-first post-production factory for video, audio and mixed content.
+**Anas Content Factory (ACF)** is a local-first, autonomous video post-production engine.
+
+> Give ACF a folder and let it figure out the production.
+
+The design principle is simple: **AI decides. Deterministic tools execute. Verification checks the result.**
+
+ACF does not require n8n, Claude Code, HyperEdit, Remotion, Obsidian, a database, or a giant local model.
 
 The intended user experience is simple:
 
@@ -9,6 +15,46 @@ The intended user experience is simple:
 The system discovers the media, prepares lightweight analysis assets, normalizes a timestamped transcript when Whisper is available, samples frames for vision analysis, asks a cloud model to create an executable edit plan, renders a review build, creates Shorts, runs technical QC, and delivers configured outputs.
 
 The laptop is the deterministic workstation. Large semantic models do not need to run locally.
+
+## Architecture
+
+    RAW FOLDER
+        |
+        v
+    DISCOVER / ANALYZE
+        |
+        +-- manifest / proxies / audio / silence
+        |
+        v
+    TRANSCRIBE
+        |
+        v
+    VISUAL ANALYSIS + MEDIA INDEX
+        |
+        v
+    PRODUCER / DIRECTOR AI
+        |
+        +-- edit plan / style / motion beats / Shorts
+        |
+        v
+    FFMPEG EDITOR
+        |
+        v
+    REVIEW + VISUAL VERIFY
+        |
+        v
+    APPROVAL
+        |
+        +----------+----------+
+        v                     v
+      MASTER                 SHORTS
+        |                     |
+        +----------+----------+
+                   v
+                  QC
+                   |
+                   v
+               DELIVERY
 
 ## Pipeline
 
@@ -37,7 +83,8 @@ The laptop is the deterministic workstation. Large semantic models do not need t
 
 5. Plan
    - Producer/Director model receives the manifest, transcript, visual analysis, silence analysis and references.
-   - Selects a simple editing style and may create sparse transcript-aligned motion beats.
+   - Selects a built-in editing style such as clean, short-form, course or showreel.
+   - May create sparse timestamped motion beats for important spoken moments.
    - Produces decisions/edit-plan.json.
    - Plans are timestamped and inspectable before rendering.
    - Project style feedback is retained in analysis/style-memory.md after natural-language revisions.
@@ -45,14 +92,15 @@ The laptop is the deterministic workstation. Large semantic models do not need t
 
 6. Execute
    - Deterministic FFmpeg segment renders.
-   - Supports trims, joins, reframing, transcript captions, sparse timestamped motion beats/callouts, explicit graphics and audio normalization.
+   - Supports trims, joins, reframing, transcript captions, sparse motion beats/callouts, explicit graphics and audio normalization.
    - Segment checkpoints make interrupted renders resumable.
+   - Motion-beat data is included in the segment cache key so visual changes re-render correctly.
 
 7. Review
    - Produces a lightweight review/review.mp4.
    - Writes review/review-notes.md with the checks to perform.
+   - Runs sampled-frame visual verification and stores review/verification.json.
    - When review_required_before_final is enabled, the pipeline pauses here until acf review PROJECT --approve.
-   - Runs a lightweight sampled-frame visual verification and stores review/verification.json before approval.
    - Revisions can be requested in natural language and restart only the downstream stages.
 
 8. Shorts
@@ -168,6 +216,21 @@ Required analysis files include:
 
 The project state tracks stage attempts, completion, errors, warnings, outputs, human-action requests and resumability.
 
+## Editing styles
+
+ACF intentionally uses a small style system rather than a giant external skills framework.
+
+Built-in styles:
+
+- clean — restrained professional/talking-head editing
+- short-form — faster social editing
+- course — educational content focused on comprehension
+- showreel — higher-energy promotional/event editing
+
+The Producer chooses a suitable style from the project type and can use project-specific feedback stored in analysis/style-memory.md.
+
+Motion beats are deliberately lightweight: short, timestamped callouts or emphasis text rendered by FFmpeg. ACF is not trying to become a full browser timeline or a Hyperframes/Remotion clone.
+
 ## Export profiles
 
 Built-in profiles are:
@@ -185,6 +248,18 @@ Aliases include youtube, shorts, reels, instagram-reel and square.
 The system should only ask when it is genuinely blocked, the input is materially ambiguous, or the configured review gate needs a human approval.
 
 Questions are stored in decisions/human-action.json. The CLI shows the exact stage, reason, question and context. After the answer is supplied, acf resume retries from the interrupted stage rather than restarting the whole job.
+
+## Project memory and verification
+
+Project feedback is stored as plain text instead of a database:
+
+    analysis/style-memory.md
+
+This lets later planning remember practical preferences such as cleaner overlays, stronger openings, less motion, or keeping graphics away from the speaker.
+
+Visual verification samples the rendered review and asks the vision provider to look for concrete production defects such as clipped text, broken crops, black frames, accidental UI or overlays covering important content.
+
+Verification is intentionally conservative: subjective artistic taste is not automatically treated as a failure.
 
 ## Resource policy
 
@@ -214,4 +289,46 @@ Never commit .env, source media, generated jobs or model weights.
 
 ## Engineering status
 
-The requested production subsystems plus the lean automation layer are implemented: Clip Hunter, smart-silence analysis, a searchable media index, deterministic fast actions, and an explicit review gate. The next real-world validation step is running the factory against actual client media and tuning provider prompts and FFmpeg edge cases from those test runs.
+Package version: 0.3.0
+
+Implemented:
+
+- autonomous project orchestration
+- media discovery and FFprobe manifests
+- lightweight proxies and working audio
+- Whisper transcript normalization
+- visual frame analysis
+- searchable project media index
+- Producer/Director planning
+- deterministic FFmpeg execution
+- smart silence analysis
+- deterministic fast actions
+- Clip Hunter and Shorts generation
+- built-in editing styles
+- project style memory
+- timestamped motion beats
+- review renders
+- sampled-frame visual verification
+- human approval gate
+- natural-language revisions
+- technical QC
+- final delivery
+
+Current validation status:
+
+The repository has not yet been validated against real client media on the target laptop from this environment. The next engineering step is real-world testing and tuning around FFmpeg edge cases, transcription quality, provider responses, motion-beat readability and editorial output quality.
+
+The long-term UX remains:
+
+    Give it a folder
+          |
+          v
+      Let it work
+          |
+          v
+    Review when required
+          |
+          +----> Approve or revise
+          |
+          v
+      Get the outputs

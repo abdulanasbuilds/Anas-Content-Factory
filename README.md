@@ -36,20 +36,23 @@ The laptop is the deterministic workstation. Large semantic models do not need t
    - Builds analysis/media-index.json so local assets and visual discoveries can be searched without a database.
 
 5. Plan
-   - Producer/Director model receives the manifest, transcript, visual analysis and references.
+   - Producer/Director model receives the manifest, transcript, visual analysis, silence analysis and references.
+   - Selects a simple editing style and may create sparse transcript-aligned motion beats.
    - Produces decisions/edit-plan.json.
    - Plans are timestamped and inspectable before rendering.
+   - Project style feedback is retained in analysis/style-memory.md after natural-language revisions.
    - Project category folders are created only after the category is inferred.
 
 6. Execute
    - Deterministic FFmpeg segment renders.
-   - Supports trims, joins, reframing, captions when transcript data exists, graphics when an explicit font file is supplied, and audio normalization.
+   - Supports trims, joins, reframing, transcript captions, sparse timestamped motion beats/callouts, explicit graphics and audio normalization.
    - Segment checkpoints make interrupted renders resumable.
 
 7. Review
    - Produces a lightweight review/review.mp4.
    - Writes review/review-notes.md with the checks to perform.
    - When review_required_before_final is enabled, the pipeline pauses here until acf review PROJECT --approve.
+   - Runs a lightweight sampled-frame visual verification and stores review/verification.json before approval.
    - Revisions can be requested in natural language and restart only the downstream stages.
 
 8. Shorts
@@ -155,6 +158,7 @@ Required analysis files include:
 - media-manifest.json
 - media-index.json
 - silence.json
+- style-memory.md (created when useful style feedback is learned)
 - references.md
 
 The project state tracks stage attempts, completion, errors, warnings, outputs, human-action requests and resumability.

@@ -669,6 +669,70 @@ def run_pipeline(job: Path):
     return _load_state(job)
 
 
+def clip_pipeline(source: Path):
+    job = create_job(source)
+    state = _load_state(job)
+
+    if not _stage_done(job, "ANALYZING"):
+        manifest = analyze_source(source, job)
+    else:
+        manifest = json.loads(
+            (job / "analysis" / "media-manifest.json").read_text(encoding="utf-8")
+        )
+
+    if not _stage_done(job, "TRANSCRIBING"):
+        transcribe_stage(job, manifest)
+
+    videos = [
+        item for item in manifest.get("files", [])
+        if Path(item["path"]).suffix.lower() in VIDEO_EXTS
+    ]
+    if not videos:
+        raise EditPlanError("Clip-only mode requires at least one video source.")
+
+    primary = videos[0]
+    primary_path = str(Path(primary["path"]).resolve())
+    total = float((primary.get("probe") or {}).get("format", {}).get("duration", 0) or 0)
+    style_name, style = choose("short-form")
+    plan = {
+        "version": 1,
+        "project_type": "short-form",
+        "style_profile": style_name,
+        "style": style,
+        "summary": "Fast clip extraction from the primary video source.",
+        "requested_outputs": ["vertical_1080x1920"],
+        "edit_decisions": [
+            {
+                "source": primary_path,
+                "start": 0,
+                "end": total,
+                "action": "keep",
+            }
+        ],
+        "highlights": [],
+        "issues": [],
+        "missing_assets": [],
+        "shorts": [],
+        "motion_beats": [],
+    }
+    (job / "decisions" / "edit-plan.json").write_text(
+        json.dumps(plan, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    state["project_type"] = "short-form"
+    state["style_profile"] = style_name
+    state["requested_outputs"] = ["vertical_1080x1920"]
+    save(_state_path(job), state)
+
+    rendered = shorts_stage(job)
+    state = _load_state(job)
+    state["status"] = "COMPLETED" if rendered else "SHORTS"
+    state["current_stage"] = "SHORTS"
+    state["output_locations"] = [item["path"] for item in rendered]
+    save(_state_path(job), state)
+    return job, rendered
+
+
 def resume(job: Path):
     return run_pipeline(job)
 

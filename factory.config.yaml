@@ -19,6 +19,7 @@ editing:
   story_first: true
   review_required_before_final: true
   default_output_profile: youtube_1080p
+  default_style: clean
 
 shorts:
   enabled: true

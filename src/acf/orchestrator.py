@@ -355,7 +355,7 @@ def plan_stage(job: Path, manifest: dict):
         "Return optional motion_beats with source, start, end, text, position, style. "
         "\nSTYLE GUIDANCE:\n" + style_guidance
         + "\nPROJECT STYLE MEMORY:\n" + style_memory[:12000]
-        "\nMANIFEST:\n" + json.dumps(manifest, indent=2, ensure_ascii=False)[:50000]
+        + "\nMANIFEST:\n" + json.dumps(manifest, indent=2, ensure_ascii=False)[:50000]
         + "\nTRANSCRIPT:\n" + _transcript_context(job)
         + "\nVISUAL ANALYSIS:\n" + _visual_context(job)
         + "\nSILENCE ANALYSIS:\n" + _silence_context(job)

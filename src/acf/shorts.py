@@ -4,9 +4,7 @@ import json
 import re
 from pathlib import Path
 
-from .config import factory_config
 from .editor import render_plan
-from .providers import ProviderError, extract_json, generate
 
 
 def _slug(value):
@@ -18,6 +16,8 @@ def generate_candidates(job: Path, plan: dict):
     from .clip_hunter import hunt
 
     return hunt(job, plan)
+
+
 def render_candidates(job: Path, candidates: list[dict]):
     root = job / "exports" / "shorts"
     root.mkdir(parents=True, exist_ok=True)

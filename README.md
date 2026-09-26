@@ -159,9 +159,15 @@ Resolve a pending question and continue:
 
     acf review Project --answer "Use the second camera from 01:12 to 01:26."
 
-Run a deterministic fast action without asking an AI model to reason through the mechanical operation:
+Run deterministic fast actions without asking an AI model to reason through the mechanical operation:
 
     acf action Project "remove dead air"
+    acf action Project "add captions"
+    acf action Project "create shorts"
+
+Run a standalone visual verification pass:
+
+    acf verify Project
 
 Search the local project media index:
 

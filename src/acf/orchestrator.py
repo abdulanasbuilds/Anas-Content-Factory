@@ -11,13 +11,16 @@ from .editor import EditPlanError, render_plan
 from .escalation import escalate, pending
 from .export_profiles import get_profile
 from .media import VIDEO_EXTS, discover, extract_audio, make_proxy, write_manifest, duration
+from .beats import normalize_beats
 from .media_index import build as build_media_index
 from .silence import analyze_job_audio
+from .styles import choose, prompt_context, read_feedback
 from .providers import ProviderError, extract_json, generate
 from .review import render as render_review
 from .shorts import generate_candidates, render_candidates
 from .state import ensure_state, fail_stage, finish_stage, load, now, recover_for_resume, save, start_stage
 from .transcription import render_markdown, transcribe
+from .verification import verify_review
 from .visual import analyze as analyze_visual
 
 
@@ -70,6 +73,7 @@ def create_job(source: Path, references=None):
             "project_type": "unknown",
             "requested_outputs": [],
             "review_approved": False,
+            "style_profile": None,
             "provider_used": None,
             "fallback_provider": "openrouter",
             "completed_stages": [],
@@ -273,11 +277,14 @@ def _fallback_plan(manifest):
             "issues": [],
             "missing_assets": [],
             "shorts": [],
+            "style_profile": "clean",
+            "style": choose("general")[1],
+            "motion_beats": [],
         }
     raise EditPlanError("No video source is available for a fallback plan.")
 
 
-def _normalize_plan(plan, manifest):
+def _normalize_plan(plan, manifest, input_path: Path | None = None):
     if not isinstance(plan, dict):
         raise EditPlanError("Producer response is not a JSON object.")
     normalized = dict(plan)
@@ -305,6 +312,20 @@ def _normalize_plan(plan, manifest):
         except KeyError:
             continue
     normalized["requested_outputs"] = sorted(set(cleaned_outputs or ["youtube_1080p"]))
+    style_name, style = choose(
+        normalized.get("project_type", "general"),
+        normalized.get("style_profile"),
+    )
+    normalized["style_profile"] = style_name
+    normalized["style"] = style
+    if input_path is not None:
+        normalized["motion_beats"] = normalize_beats(
+            normalized,
+            __import__("acf.editor", fromlist=["resolve_source"]).resolve_source,
+            manifest,
+            input_path,
+            beat_limit=int(style.get("beat_limit", 8)),
+        )
     normalized["shorts_requested"] = True
     return normalized
 
@@ -313,6 +334,9 @@ def plan_stage(job: Path, manifest: dict):
     start_stage(_state_path(job), "PLANNING")
     state = _load_state(job)
     references = state.get("references", [])
+    current_style = state.get("style_profile")
+    style_guidance = prompt_context(state.get("project_type", "unknown"), current_style)
+    style_memory = read_feedback(job)
     prompt = (
         "You are the Producer and Director for a professional post-production system. "
         "Understand the supplied media using the manifest, timestamped transcript and visual analysis. "
@@ -325,6 +349,12 @@ def plan_stage(job: Path, manifest: dict):
         "Use exact media paths from the manifest. "
         "A detected silent region is only a pacing signal, not an automatic deletion: preserve "
         "meaningful pauses and emotional beats. "
+        "Create sparse motion beats only where they improve comprehension or engagement. "
+        "Every motion beat must use an exact source and exact transcript-aligned timestamps. "
+        "Keep beat text short (normally under 10 words). "
+        "Return optional motion_beats with source, start, end, text, position, style. "
+        "\nSTYLE GUIDANCE:\n" + style_guidance
+        + "\nPROJECT STYLE MEMORY:\n" + style_memory[:12000]
         "\nMANIFEST:\n" + json.dumps(manifest, indent=2, ensure_ascii=False)[:50000]
         + "\nTRANSCRIPT:\n" + _transcript_context(job)
         + "\nVISUAL ANALYSIS:\n" + _visual_context(job)
@@ -333,7 +363,7 @@ def plan_stage(job: Path, manifest: dict):
     )
     try:
         raw, provider = generate(prompt)
-        plan = _normalize_plan(extract_json(raw), manifest)
+        plan = _normalize_plan(extract_json(raw), manifest, Path(state["input_path"]))
     except ProviderError as exc:
         fallback = _fallback_plan(manifest) if any(
             Path(x["path"]).suffix.lower() in VIDEO_EXTS for x in manifest.get("files", [])
@@ -376,6 +406,7 @@ def plan_stage(job: Path, manifest: dict):
     state = _load_state(job)
     state["project_type"] = plan.get("project_type", "general")
     state["requested_outputs"] = plan["requested_outputs"]
+    state["style_profile"] = plan.get("style_profile")
     state["provider_used"] = provider
     state["status"] = "PLANNING"
     state["current_stage"] = "PLANNING"
@@ -412,8 +443,32 @@ def review_stage(job: Path):
     state["review_approved"] = False
     save(_state_path(job), state)
     plan = json.loads((job / "decisions" / "edit-plan.json").read_text(encoding="utf-8"))
-    output, _ = render_review(job, plan)
-    finish_stage(_state_path(job), "REVIEW", [str(output), str(job / "review" / "review-notes.md")])
+    output, manifest = render_review(job, plan)
+    try:
+        verification = verify_review(job, output)
+        verification_path = job / "review" / "verification.json"
+        verification_path.write_text(
+            json.dumps(verification, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        warnings = []
+        if verification.get("warning"):
+            warnings.append(verification["warning"])
+        if not verification.get("passed", True):
+            warnings.append("Visual verification found concrete review issues. Inspect review/verification.json before approving.")
+        finish_stage(
+            _state_path(job),
+            "REVIEW",
+            [str(output), str(job / "review" / "review-notes.md"), str(verification_path)],
+            warnings,
+        )
+    except Exception as exc:
+        finish_stage(
+            _state_path(job),
+            "REVIEW",
+            [str(output), str(job / "review" / "review-notes.md")],
+            [f"Visual verification could not run: {exc}"],
+        )
     return output
 
 

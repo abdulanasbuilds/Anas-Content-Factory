@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from .config import jobs_dir
-from .actions import apply_remove_dead_air, classify
+from .actions import apply_add_captions, apply_remove_dead_air, classify
 from .doctor import run as doctor_run
 from .escalation import format_question, pending, resolve
 from .media_index import search as search_media
@@ -142,6 +142,13 @@ def main():
                 "action": action_name,
                 "removed_seconds": details.get("removed_seconds", 0),
                 "removed_ranges": details.get("removed_ranges", []),
+                "state": result,
+            }, indent=2, ensure_ascii=False))
+        elif action_name == "add_captions":
+            apply_add_captions(job)
+            result = rerun_from_plan(job)
+            print(json.dumps({
+                "action": action_name,
                 "state": result,
             }, indent=2, ensure_ascii=False))
         elif action_name == "create_shorts":

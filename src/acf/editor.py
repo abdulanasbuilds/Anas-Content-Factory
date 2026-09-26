@@ -223,8 +223,12 @@ def validate_plan(plan: dict, manifest: dict, input_path: Path):
     return normalized
 
 
-def _segment_key(item, profile_key):
-    payload = json.dumps({"item": item, "profile": profile_key}, sort_keys=True, ensure_ascii=False)
+def _segment_key(item, profile_key, beats=None):
+    payload = json.dumps(
+        {"item": item, "profile": profile_key, "beats": beats or []},
+        sort_keys=True,
+        ensure_ascii=False,
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:14]
 
 
@@ -234,7 +238,11 @@ def _render_segment(job: Path, item: dict, index: int, profile_key: str, profile
     end = float(item["end"])
     out_dir = job / "working" / "segments" / profile_key
     out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / f"segment_{index:04d}_{_segment_key(item, profile_key)}.mp4"
+    relevant_beats = [
+        beat for beat in (beats or [])
+        if str(Path(beat["source"]).resolve()) == str(source.resolve())
+    ]
+    out = out_dir / f"segment_{index:04d}_{_segment_key(item, profile_key, relevant_beats)}.mp4"
     if out.exists() and out.stat().st_size > 0:
         return out, True
 

@@ -25,6 +25,19 @@ shorts:
   min_seconds: 20
   max_seconds: 60
   max_candidates: 6
+  chunk_segments: 120
+  max_chunks: 8
+  candidates_per_chunk: 3
+
+silence:
+  threshold_db: -35
+  min_seconds: 1.2
+  max_seconds: 8
+  trim_padding_seconds: 0.12
+  min_cut_seconds: 0.7
+
+actions:
+  enabled: true
 
 recovery:
   checkpoint_each_segment: true

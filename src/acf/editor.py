@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .beats import normalize_beats
 from .export_profiles import get_profile
 from .media import binary, duration, has_audio
 
@@ -65,6 +66,71 @@ def _caption_filter(job: Path, source: Path, start: float, end: float):
     return (
         f"subtitles='{_escape_filter_path(srt)}':"
         "force_style='FontSize=22,Outline=2,Alignment=2,MarginV=48'"
+    )
+
+
+def _escape_drawtext_text(value):
+    slash = chr(92)
+    return (
+        str(value or "")
+        .replace(slash, slash + slash)
+        .replace("'", slash + "'")
+        .replace(":", slash + ":")
+        .replace("%", slash + "%")
+        .replace(",", slash + ",")
+    )
+
+
+def _beat_filter(beat, segment_start, segment_end):
+    start = max(float(beat["start"]), float(segment_start)) - float(segment_start)
+    end = min(float(beat["end"]), float(segment_end)) - float(segment_start)
+    if end <= start:
+        return None
+
+    text = _escape_drawtext_text(beat.get("text", ""))
+    position = str(beat.get("position", "bottom")).lower()
+    fontsize = max(18, min(96, int(beat.get("fontsize", 42))))
+    if position == "top":
+        x = "(w-text_w)/2"
+        y = "70"
+    elif position == "center":
+        x = "(w-text_w)/2"
+        y = "(h-text_h)/2"
+    elif position == "left":
+        x = "70"
+        y = "(h-text_h)/2"
+    elif position == "right":
+        x = "w-text_w-70"
+        y = "(h-text_h)/2"
+    else:
+        x = "(w-text_w)/2"
+        y = "h-text_h-90"
+
+    font_file = beat.get("font_file")
+    font_part = (
+        f"fontfile='{_escape_filter_path(Path(font_file))}':"
+        if font_file and Path(font_file).exists()
+        else ""
+    )
+    enable = f"between(t\\,{start:.3f}\\,{end:.3f})"
+    style = str(beat.get("style", "callout")).lower()
+    if style == "emphasis":
+        box_alpha = "0.72"
+        border = 24
+    elif style == "label":
+        box_alpha = "0.52"
+        border = 14
+    else:
+        box_alpha = "0.58"
+        border = 18
+
+    return (
+        "drawtext="
+        + font_part
+        + f"text='{text}':x={x}:y={y}:fontsize={fontsize}:"
+        "fontcolor=white:borderw=2:bordercolor=black@0.75:"
+        f"box=1:boxcolor=black@{box_alpha}:boxborderw={border}:"
+        f"enable='{enable}'"
     )
 
 
@@ -162,7 +228,7 @@ def _segment_key(item, profile_key):
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:14]
 
 
-def _render_segment(job: Path, item: dict, index: int, profile_key: str, profile: dict):
+def _render_segment(job: Path, item: dict, index: int, profile_key: str, profile: dict, beats=None):
     source = Path(item["source"])
     start = float(item["start"])
     end = float(item["end"])
@@ -180,6 +246,13 @@ def _render_segment(job: Path, item: dict, index: int, profile_key: str, profile
     graphics_filter = _graphics_filter(item)
     if graphics_filter:
         filters.append(graphics_filter)
+
+    for beat in beats or []:
+        if str(Path(beat["source"]).resolve()) != str(source.resolve()):
+            continue
+        beat_filter = _beat_filter(beat, start, end)
+        if beat_filter:
+            filters.append(beat_filter)
 
     vf = ",".join(filters)
     af = "aresample=async=1:first_pts=0,loudnorm=I=-16:TP=-1.5:LRA=11"
@@ -235,6 +308,15 @@ def render_plan(job: Path, plan: dict, profile_name: str, output_path: Path):
     input_path = Path(state["input_path"])
     profile_key, profile = get_profile(profile_name)
     decisions = validate_plan(plan, manifest, input_path)
+    beats = normalize_beats(
+        plan,
+        resolve_source,
+        manifest,
+        input_path,
+        beat_limit=max(1, int(plan.get("style", {}).get("beat_limit", 8)))
+        if isinstance(plan.get("style"), dict)
+        else 8,
+    )
 
     checkpoint = job / "working" / f"timeline-{profile_key}.json"
     if checkpoint.exists():
@@ -247,7 +329,7 @@ def render_plan(job: Path, plan: dict, profile_name: str, output_path: Path):
 
     rendered = []
     for index, item in enumerate(decisions):
-        segment_path, reused = _render_segment(job, item, index, profile_key, profile)
+        segment_path, reused = _render_segment(job, item, index, profile_key, profile, beats)
         rendered.append(segment_path)
         progress["segments"] = [
             *[entry for entry in progress.get("segments", []) if entry.get("index") != index],
@@ -292,6 +374,8 @@ def render_plan(job: Path, plan: dict, profile_name: str, output_path: Path):
         "version": 1,
         "profile": profile_key,
         "output": str(output_path),
+        "style_profile": plan.get("style_profile"),
+        "motion_beats": beats,
         "segments": [
             {
                 "index": i,

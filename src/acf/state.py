@@ -48,6 +48,7 @@ def ensure_state(state: dict) -> dict:
     state.setdefault("output_locations", [])
     state.setdefault("requested_outputs", [])
     state.setdefault("review_approved", False)
+    state.setdefault("style_profile", None)
     state.setdefault("references", [])
     state.setdefault("updated_at", now())
     for stage in STAGES:

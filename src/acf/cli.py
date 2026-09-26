@@ -12,6 +12,7 @@ from .media_index import search as search_media
 from .orchestrator import (
     analyze_source,
     approve_review,
+    clip_pipeline,
     create_job,
     delivery_stage,
     plan_stage,
@@ -45,7 +46,10 @@ def main():
     p = sub.add_parser("run")
     p.add_argument("path")
     p.add_argument("--reference", action="append", default=[])
-    
+
+    p = sub.add_parser("clips")
+    p.add_argument("path")
+
     p = sub.add_parser("analyze")
     p.add_argument("path")
     p.add_argument("--reference", action="append", default=[])
@@ -80,6 +84,17 @@ def main():
     sub.add_parser("doctor")
 
     args = parser.parse_args()
+
+    if args.command == "clips":
+        source = Path(args.path).expanduser().resolve()
+        if not source.exists():
+            raise SystemExit(f"Path not found: {source}")
+        job, rendered = clip_pipeline(source)
+        print(json.dumps({
+            "job": str(job),
+            "shorts": rendered,
+        }, indent=2, ensure_ascii=False))
+        return
 
     if args.command in {"run", "analyze"}:
         source = Path(args.path).expanduser().resolve()
@@ -130,6 +145,7 @@ def main():
             review_file = job / "review" / "review.mp4"
             state = load(job / "project.json")
             print(f"Review build: {review_file}")
+            print(f"Visual verification: {job / 'review' / 'verification.json'}")
             print(f"Approved: {state.get('review_approved', False)}")
             print(f"State: {state.get('status')}")
     elif args.command == "action":

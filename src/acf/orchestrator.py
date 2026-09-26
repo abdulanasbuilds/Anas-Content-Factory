@@ -11,6 +11,8 @@ from .editor import EditPlanError, render_plan
 from .escalation import escalate, pending
 from .export_profiles import get_profile
 from .media import VIDEO_EXTS, discover, extract_audio, make_proxy, write_manifest, duration
+from .media_index import build as build_media_index
+from .silence import analyze_job_audio
 from .providers import ProviderError, extract_json, generate
 from .review import render as render_review
 from .shorts import generate_candidates, render_candidates
@@ -67,6 +69,7 @@ def create_job(source: Path, references=None):
             "input_path": str(source.resolve()),
             "project_type": "unknown",
             "requested_outputs": [],
+            "review_approved": False,
             "provider_used": None,
             "fallback_provider": "openrouter",
             "completed_stages": [],
@@ -124,6 +127,11 @@ def analyze_source(source: Path, job: Path):
             warnings.append(f"Could not extract audio for {path.name}.")
 
     _ensure_required_analysis_files(job)
+    try:
+        analyze_job_audio(job, manifest)
+    except Exception as exc:
+        warnings.append(f"Could not analyze silence: {exc}")
+
     finish_stage(
         _state_path(job),
         "ANALYZING",
@@ -206,10 +214,18 @@ def transcribe_stage(job: Path, manifest: dict):
 def visual_stage(job: Path, manifest: dict):
     start_stage(_state_path(job), "VISUAL_ANALYSIS")
     result = analyze_visual(job, manifest)
+    try:
+        build_media_index(job, manifest)
+    except Exception as exc:
+        result.setdefault("warnings", []).append(f"Could not build media index: {exc}")
     finish_stage(
         _state_path(job),
         "VISUAL_ANALYSIS",
-        [str(job / "analysis" / "scenes.json"), str(job / "analysis" / "assets.json")],
+        [
+            str(job / "analysis" / "scenes.json"),
+            str(job / "analysis" / "assets.json"),
+            str(job / "analysis" / "media-index.json"),
+        ],
         result.get("warnings", []),
     )
     return result
@@ -379,10 +395,34 @@ def execute_stage(job: Path):
 
 def review_stage(job: Path):
     start_stage(_state_path(job), "REVIEW")
+    state = _load_state(job)
+    state["review_approved"] = False
+    save(_state_path(job), state)
     plan = json.loads((job / "decisions" / "edit-plan.json").read_text(encoding="utf-8"))
     output, _ = render_review(job, plan)
     finish_stage(_state_path(job), "REVIEW", [str(output), str(job / "review" / "review-notes.md")])
     return output
+
+
+def _review_gate(job: Path):
+    policy = factory_config().get("editing", {})
+    required = policy.get("review_required_before_final", True)
+    if required in {False, "false", "False", 0}:
+        return True
+    state = _load_state(job)
+    if state.get("review_approved"):
+        return True
+    action = pending(job)
+    if action and action.get("stage") == "REVIEW":
+        return False
+    escalate(
+        job,
+        "REVIEW",
+        f"Watch {job / 'review' / 'review.mp4'} and approve it with acf review {job.name} --approve. For changes, use acf revise {job.name} ...",
+        "The review gate is enabled before Shorts and final delivery.",
+        {"review_file": str(job / "review" / "review.mp4")},
+    )
+    return False
 
 
 def shorts_stage(job: Path):
@@ -520,11 +560,22 @@ def run_pipeline(job: Path):
     for stage, fn, question in (
         ("EXECUTING", lambda: execute_stage(job), "Fix the FFmpeg/edit-plan error, then run acf resume."),
         ("REVIEW", lambda: review_stage(job), "Fix the review-rendering error, then run acf resume."),
-        ("SHORTS", lambda: shorts_stage(job), "Fix the Shorts generation/rendering issue, then run acf resume."),
     ):
         if not _stage_done(job, stage):
             if _guard(job, stage, fn, question) is None:
                 return _load_state(job)
+
+    if not _stage_done(job, "REVIEW") or not _review_gate(job):
+        return _load_state(job)
+
+    if not _stage_done(job, "SHORTS"):
+        if _guard(
+            job,
+            "SHORTS",
+            lambda: shorts_stage(job),
+            "Fix the Shorts generation/rendering issue, then run acf resume.",
+        ) is None:
+            return _load_state(job)
 
     if not _stage_done(job, "QC"):
         report = _guard(
@@ -552,6 +603,37 @@ def resume(job: Path):
     return run_pipeline(job)
 
 
+def rerun_from_plan(job: Path):
+    state = _load_state(job)
+    state["status"] = "RESUMING"
+    state["current_stage"] = "EXECUTING"
+    state["blocked"] = False
+    state["human_action_required"] = False
+    state["review_approved"] = False
+    for stage in ("EXECUTING", "REVIEW", "SHORTS", "QC", "DELIVERING", "COMPLETED"):
+        state["stages"][stage] = {
+            "status": "pending",
+            "attempts": state["stages"].get(stage, {}).get("attempts", 0),
+        }
+    state["completed_stages"] = [
+        x for x in state.get("completed_stages", [])
+        if x not in {"EXECUTING", "REVIEW", "SHORTS", "QC", "DELIVERING", "COMPLETED"}
+    ]
+    save(_state_path(job), state)
+    return run_pipeline(job)
+
+
+def approve_review(job: Path):
+    state = _load_state(job)
+    state["review_approved"] = True
+    state["blocked"] = False
+    state["human_action_required"] = False
+    state["status"] = "RESUMING"
+    state["updated_at"] = now()
+    save(_state_path(job), state)
+    return run_pipeline(job)
+
+
 def revise_and_resume(job: Path, instruction: str):
     from .plan_revision import apply_revision
 
@@ -568,12 +650,5 @@ def revise_and_resume(job: Path, instruction: str):
         return None, None, _load_state(job)
     state = _load_state(job)
     state["provider_used"] = provider
-    state["status"] = "RESUMING"
-    state["current_stage"] = "EXECUTING"
-    state["blocked"] = False
-    state["human_action_required"] = False
-    for stage in ("EXECUTING", "REVIEW", "SHORTS", "QC", "DELIVERING", "COMPLETED"):
-        state["stages"][stage] = {"status": "pending", "attempts": state["stages"].get(stage, {}).get("attempts", 0)}
-    state["completed_stages"] = [x for x in state.get("completed_stages", []) if x not in {"EXECUTING", "REVIEW", "SHORTS", "QC", "DELIVERING", "COMPLETED"}]
     save(_state_path(job), state)
-    return plan, number, run_pipeline(job)
+    return plan, number, rerun_from_plan(job)

@@ -57,6 +57,7 @@ The laptop is the deterministic workstation. Large semantic models do not need t
 
 8. Shorts
    - Clip Hunter analyzes transcript chunks instead of repeatedly sending the entire transcript.
+   - The fast `acf clips` command skips full master/review production when only Shorts are needed.
    - Candidates are scored for hook strength, standalone clarity, usefulness, pacing and related editorial signals.
    - Overlapping candidates are deduplicated before selection.
    - Each candidate is rendered independently in 9:16 with captions when timestamped transcript data exists.
@@ -78,9 +79,13 @@ The laptop is the deterministic workstation. Large semantic models do not need t
 
 ## CLI
 
-Start an autonomous run:
+Start a full autonomous production run:
 
     acf run "D:/Videos/Project"
+
+Run the fast Shorts-only pipeline:
+
+    acf clips "D:/Videos/Project"
 
 Add a supplied reference URL:
 

@@ -23,6 +23,7 @@ from .orchestrator import (
     run_pipeline,
 )
 from .state import load
+from .verification import verify_review
 
 
 def _job(value):
@@ -65,6 +66,9 @@ def main():
     p.add_argument("--answer")
     p.add_argument("--approve", action="store_true")
 
+    p = sub.add_parser("verify")
+    p.add_argument("project")
+
     p = sub.add_parser("action")
     p.add_argument("project")
     p.add_argument("request", nargs="+")
@@ -84,6 +88,19 @@ def main():
     sub.add_parser("doctor")
 
     args = parser.parse_args()
+
+    if args.command == "verify":
+        job = _job(args.project)
+        review_file = job / "review" / "review.mp4"
+        if not review_file.exists():
+            raise SystemExit(f"Review build not found: {review_file}")
+        result = verify_review(job, review_file)
+        (job / "review" / "verification.json").write_text(
+            json.dumps(result, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return
 
     if args.command == "clips":
         source = Path(args.path).expanduser().resolve()

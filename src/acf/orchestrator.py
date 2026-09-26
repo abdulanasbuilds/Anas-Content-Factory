@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .config import factory_config, jobs_dir
 from .delivery import deliver
-from .editor import EditPlanError, render_plan
+from .editor import EditPlanError, render_plan, resolve_source
 from .escalation import escalate, pending
 from .export_profiles import get_profile
 from .media import VIDEO_EXTS, discover, extract_audio, make_proxy, write_manifest, duration
@@ -321,7 +321,7 @@ def _normalize_plan(plan, manifest, input_path: Path | None = None):
     if input_path is not None:
         normalized["motion_beats"] = normalize_beats(
             normalized,
-            __import__("acf.editor", fromlist=["resolve_source"]).resolve_source,
+            resolve_source,
             manifest,
             input_path,
             beat_limit=int(style.get("beat_limit", 8)),

@@ -21,6 +21,16 @@ Do not over-cut natural speech. Preserve context when a shorter cut would change
 
 Choose requested export profiles from the supported profiles only.
 
+Style and motion:
+- Select a simple style profile that matches the project instead of inventing a new visual language every time.
+- Use sparse motion beats only when they clarify a spoken idea or materially improve pacing.
+- Every motion beat must use an exact source and transcript-aligned timestamps.
+- Keep beat text short and readable; normally under 10 words.
+- Avoid covering faces, important subjects, captions or other essential content.
+- Prefer actual project assets for visual support before treating anything as missing.
+- Use cutaway segments from discovered media when they communicate the spoken idea better than a text overlay.
+- Treat prior style-memory feedback as project-specific guidance, not an instruction to repeat every prior effect.
+
 When something is genuinely blocked, create a precise human-action request stating what was found, what is missing, exactly what answer or asset is required and what stage will resume afterward.
 
 Return valid JSON only for machine-readable planning.

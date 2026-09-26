@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 
 from .config import factory_config
@@ -21,15 +20,24 @@ def load_segments(job: Path):
 
 def chunk_segments(segments, size=120, max_chunks=8):
     size = max(1, int(size))
-    chunks = []
-    for index in range(0, len(segments), size):
-        chunk = segments[index:index + size]
-        if not chunk:
-            continue
-        chunks.append(chunk)
-        if len(chunks) >= int(max_chunks):
-            break
-    return chunks
+    max_chunks = max(1, int(max_chunks))
+    all_chunks = [
+        segments[index:index + size]
+        for index in range(0, len(segments), size)
+        if segments[index:index + size]
+    ]
+    if len(all_chunks) <= max_chunks:
+        return all_chunks
+
+    if max_chunks == 1:
+        return [all_chunks[len(all_chunks) // 2]]
+
+    indices = []
+    for slot in range(max_chunks):
+        index = round(slot * (len(all_chunks) - 1) / (max_chunks - 1))
+        if index not in indices:
+            indices.append(index)
+    return [all_chunks[index] for index in indices]
 
 
 def _score(candidate):
@@ -114,6 +122,9 @@ def _normalize_candidate(candidate, chunk, min_seconds, max_seconds):
     chunk_start = min(float(item["start"]) for item in chunk)
     chunk_end = max(float(item["end"]) for item in chunk)
     if start < chunk_start - 0.25 or start >= chunk_end + 0.25:
+        return None
+    end = min(end, chunk_end)
+    if end - start < min_seconds:
         return None
 
     normalized = {

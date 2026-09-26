@@ -135,7 +135,10 @@ def analyze_source(source: Path, job: Path):
     finish_stage(
         _state_path(job),
         "ANALYZING",
-        [str(manifest_path)] + ([str(job / "working" / "proxies")] if (job / "working" / "proxies").exists() else []),
+        [
+            str(manifest_path),
+            str(job / "analysis" / "silence.json"),
+        ] + ([str(job / "working" / "proxies")] if (job / "working" / "proxies").exists() else []),
         warnings,
     )
     return manifest
@@ -238,6 +241,13 @@ def _transcript_context(job, limit=45000):
     return path.read_text(encoding="utf-8")[:limit]
 
 
+def _silence_context(job, limit=14000):
+    path = job / "analysis" / "silence.json"
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")[:limit]
+
+
 def _visual_context(job, limit=26000):
     parts = []
     for name in ("scenes.json", "assets.json"):
@@ -313,9 +323,12 @@ def plan_stage(job: Path, manifest: dict):
         "Return JSON only with project_type, summary, requested_outputs, edit_decisions, highlights, issues, missing_assets, shorts. "
         "Each edit_decision needs source, start, end, action and may contain captions, reframe, graphics or audio. "
         "Use exact media paths from the manifest. "
+        "A detected silent region is only a pacing signal, not an automatic deletion: preserve "
+        "meaningful pauses and emotional beats. "
         "\nMANIFEST:\n" + json.dumps(manifest, indent=2, ensure_ascii=False)[:50000]
         + "\nTRANSCRIPT:\n" + _transcript_context(job)
         + "\nVISUAL ANALYSIS:\n" + _visual_context(job)
+        + "\nSILENCE ANALYSIS:\n" + _silence_context(job)
         + "\nREFERENCES:\n" + json.dumps(references, indent=2, ensure_ascii=False)
     )
     try:
@@ -625,6 +638,11 @@ def rerun_from_plan(job: Path):
 
 def approve_review(job: Path):
     state = _load_state(job)
+    if not _stage_done(job, "REVIEW"):
+        state["review_approved"] = False
+        state["updated_at"] = now()
+        save(_state_path(job), state)
+        return state
     state["review_approved"] = True
     state["blocked"] = False
     state["human_action_required"] = False
